@@ -1,0 +1,64 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+
+:root,
+[data-theme="dark"] {
+  --bg-base: #0f172a;
+  --bg-surface: #1e1e2e;
+  --bg-surface-alt: #1e293b;
+  --bg-hover: #312e81;
+  --bg-input: #1e1e2e;
+  --border: #334155;
+  --border-row: #1e293b;
+  --text-primary: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --accent: #6366f1;
+  --accent-text: #818cf8;
+  --accent-bg: #1e1b4b;
+  --btn-bg: #334155;
+  --btn-text: #fff;
+  --chart-grid: #334155;
+  --tooltip-bg: #1e293b;
+  --waterfall-bar: #1e293b;
+  --waterfall-text: #e2e8f0;
+  --otel-banner-bg: #1e293b;
+  --otel-item-bg: #0f172a;
+  --active-status-bg: #064e3b;
+  --active-status-text: #34d399;
+  --error-bg: #1e1e2e;
+  --pre-text: #94a3b8;
+}
+
+[data-theme="light"] {
+  --bg-base: #f1f5f9;
+  --bg-surface: #ffffff;
+  --bg-surface-alt: #f8fafc;
+  --bg-hover: #e0e7ff;
+  --bg-input: #ffffff;
+  --border: #cbd5e1;
+  --border-row: #e2e8f0;
+  --text-primary: #1e293b;
+  --text-secondary: #64748b;
+  --text-muted: #94a3b8;
+  --accent: #6366f1;
+  --accent-text: #4f46e5;
+  --accent-bg: #e0e7ff;
+  --btn-bg: #e2e8f0;
+  --btn-text: #1e293b;
+  --chart-grid: #e2e8f0;
+  --tooltip-bg: #ffffff;
+  --waterfall-bar: #e2e8f0;
+  --waterfall-text: #1e293b;
+  --otel-banner-bg: #f8fafc;
+  --otel-item-bg: #f1f5f9;
+  --active-status-bg: #d1fae5;
+  --active-status-text: #065f46;
+  --error-bg: #ffffff;
+  --pre-text: #64748b;
+}
+
+body {
+  background: var(--bg-base);
+  color: var(--text-primary);
+}
