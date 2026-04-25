@@ -1,4 +1,4 @@
-# 🛰️ AgentOrbit
+# AgentOrbit
 
 A single-pane-of-glass observability dashboard for **Amazon Bedrock AgentCore**. Monitor agent adoption, performance, cost, and health across your entire agent fleet from one place.
 
