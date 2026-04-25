@@ -4,10 +4,16 @@ A single-pane-of-glass observability dashboard for **Amazon Bedrock AgentCore**.
 
 Built for leadership and platform teams who need answers to: *How are our agents doing? What are they costing us? Which ones are most used?*
 
+
 ## What You Get
 
 ### Dashboard (Home)
 The executive view — everything at a glance.
+
+![Dashboard — KPIs, Resource Inventory, and Latency](images/screenshot-1.png)
+![Dashboard — Leaderboard, Model Metrics, and Cost](images/screenshot-2.png)
+
+#### KPI Cards
 
 | Section | What It Shows | Data Source |
 |---------|--------------|-------------|
@@ -24,6 +30,8 @@ The executive view — everything at a glance.
 | **Error Rate** | Percentage of agent invocations that resulted in errors (both server-side 5xx and client-side 4xx). The subtitle shows the absolute error count. | `AWS/Bedrock-AgentCore` → `SystemErrors` + `UserErrors` metrics (Sum) | `(SystemErrors + UserErrors) / Invocations × 100` |
 | **Tokens** | Total input + output tokens consumed across all Bedrock model invocations in the account. The subtitle breaks it down into input (prompt) and output (completion) tokens. This is account-wide, not per-agent. | `AWS/Bedrock` → `InputTokenCount` + `OutputTokenCount` metrics (Sum), no dimension filter | Summed across all models |
 | **Cost** | Total spend on Amazon Bedrock (model invocations) + Amazon Bedrock AgentCore (runtime compute, memory, gateway, etc.) from AWS Cost Explorer. Minimum 7-day window. | AWS Cost Explorer → `GetCostAndUsage` API, filtered to services: `Amazon Bedrock`, `Amazon Bedrock Service`, `Amazon Bedrock AgentCore` | Sum of `UnblendedCost` across filtered services |
+
+#### Model and Agent Metrics
 
 | Section | What It Shows | Data Source |
 |---------|--------------|-------------|
@@ -42,6 +50,8 @@ The executive view — everything at a glance.
 
 ### Inventory
 Detailed resource tables with health status pie charts for all AgentCore resource types.
+
+![Dashboard — Agent Details and Evaluation Configs](images/screenshot-3.png)
 
 ## Architecture
 

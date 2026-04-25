@@ -64,6 +64,13 @@ function HealthCard({ name, group }: { name: string; group: ResourceGroup }) {
 }
 
 function getName(item: Record<string, unknown>): string {
+  // For endpoints, prepend the agent runtime name
+  if (item.agentRuntimeArn && item.name) {
+    const arn = String(item.agentRuntimeArn);
+    const runtimeId = arn.split("/").pop() || "";
+    const agentName = runtimeId.replace(/-[a-zA-Z0-9]{10}$/, "");
+    return `${agentName}::${item.name}`;
+  }
   return (item.name || item.agentRuntimeName || item.gatewayName
     || item.id || item.memoryId || item.agentRuntimeId || item.gatewayId
     || item.codeInterpreterId || item.browserId || "—") as string;
