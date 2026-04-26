@@ -230,8 +230,8 @@ export default function DashboardPage() {
           <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 20 }}>
             <KpiCard icon="bi-lightning-charge-fill" label="Invocations" value={fmt(s.total_invocations)} />
             <KpiCard icon="bi-people-fill" label="Sessions" value={fmt(s.total_sessions)} />
-            <KpiCard icon="bi-clock-history" label="Agent Latency" value={`${Math.round(s.avg_latency_ms)}ms`} sub="end-to-end" color="#fbbf24" />
-            <KpiCard icon="bi-skip-forward-fill" label="TTFT" value={`${Math.round(s.avg_ttft_ms)}ms`} sub={`p90: ${Math.round(s.p90_ttft_ms)}ms`} color="#f472b6" />
+            <KpiCard icon="bi-clock-history" label="Avg Agent Latency" value={`${Math.round(s.avg_latency_ms)}ms`} sub="avg across agents" color="#fbbf24" />
+            <KpiCard icon="bi-skip-forward-fill" label="Avg TTFT (Model)" value={`${Math.round(s.avg_ttft_ms)}ms`} sub={`p90: ${Math.round(s.p90_ttft_ms)}ms`} color="#f472b6" />
             <KpiCard icon="bi-exclamation-triangle-fill" label="Error Rate" value={`${s.error_rate_pct}%`} sub={`${fmt(s.total_errors)} errors`} color={s.error_rate_pct > 5 ? "#ef4444" : "#10b981"} />
             <KpiCard icon="bi-coin" label="Tokens" value={fmt(s.total_tokens)} sub={`In: ${fmt(s.input_tokens)} / Out: ${fmt(s.output_tokens)}`} color="#818cf8" />
             <KpiCard icon="bi-currency-dollar" label="Cost" value={fmtUsd(s.cost_total_usd)} color="#34d399" />
