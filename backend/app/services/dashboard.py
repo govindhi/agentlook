@@ -554,7 +554,7 @@ def _get_cost(days: int = 30):
     consolidated: dict[str, float] = {}
     for svc, amt in by_service.items():
         if "AgentCore" in svc:
-            key = "AgentCore Runtime"
+            key = "AgentCore"
         else:
             key = "Bedrock Models"
         consolidated[key] = consolidated.get(key, 0) + amt

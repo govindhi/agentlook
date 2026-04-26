@@ -127,31 +127,46 @@ export default function DashboardPage() {
   const modelLatency = data?.model_latency ?? {};
   const acBreakdown = data?.agentcore_breakdown;
 
-  // Per-model TTFT timeline — merge all models into unified time series
+  // Per-model TTFT and Latency — separate clean timelines
   const modelNames = Object.keys(modelLatency);
-  const allTimestamps = new Set<string>();
+  const ttftChartData: Record<string, string | number>[] = [];
+  const latencyChartData: Record<string, string | number>[] = [];
+
+  // Build TTFT chart data
+  const ttftTimestamps = new Set<string>();
   for (const mn of modelNames) {
-    for (const ts of modelLatency[mn]?.ttft?.timestamps ?? []) allTimestamps.add(ts);
-    for (const ts of modelLatency[mn]?.latency?.timestamps ?? []) allTimestamps.add(ts);
+    for (const ts of modelLatency[mn]?.ttft?.timestamps ?? []) ttftTimestamps.add(ts);
   }
-  const sortedTs = [...allTimestamps].sort();
-  const modelLatencyTimeline = sortedTs.map((t) => {
+  for (const t of [...ttftTimestamps].sort()) {
     const row: Record<string, string | number> = {
-      time: new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      time: new Date(t).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }),
     };
     for (const mn of modelNames) {
-      const ttftData = modelLatency[mn]?.ttft;
-      const latData = modelLatency[mn]?.latency;
-      const ttftIdx = ttftData?.timestamps?.indexOf(t) ?? -1;
-      const latIdx = latData?.timestamps?.indexOf(t) ?? -1;
-      row[mn + " TTFT"] = ttftIdx >= 0 ? Math.round(ttftData!.values[ttftIdx]) : 0;
-      row[mn + " Latency"] = latIdx >= 0 ? Math.round(latData!.values[latIdx]) : 0;
+      const data = modelLatency[mn]?.ttft;
+      const idx = data?.timestamps?.indexOf(t) ?? -1;
+      row[mn] = idx >= 0 ? Math.round(data!.values[idx]) : 0;
     }
-    return row;
-  });
+    ttftChartData.push(row);
+  }
 
-  const ttftLineColors = ["#f472b6", "#818cf8", "#fbbf24"];
-  const latLineColors = ["#34d399", "#60a5fa", "#fb923c"];
+  // Build Latency chart data
+  const latTimestamps = new Set<string>();
+  for (const mn of modelNames) {
+    for (const ts of modelLatency[mn]?.latency?.timestamps ?? []) latTimestamps.add(ts);
+  }
+  for (const t of [...latTimestamps].sort()) {
+    const row: Record<string, string | number> = {
+      time: new Date(t).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }),
+    };
+    for (const mn of modelNames) {
+      const data = modelLatency[mn]?.latency;
+      const idx = data?.timestamps?.indexOf(t) ?? -1;
+      row[mn] = idx >= 0 ? Math.round(data!.values[idx]) : 0;
+    }
+    latencyChartData.push(row);
+  }
+
+  const modelColors = ["#818cf8", "#34d399", "#f472b6", "#fbbf24", "#60a5fa"];
 
   // Token timeline
   const tokenTimeline = (tokens.input_tokens?.timestamps ?? []).map((t, i) => ({
@@ -269,27 +284,45 @@ export default function DashboardPage() {
             </Card>
           </div>
 
-          {/* ── TTFT & Latency by Model ── */}
+          {/* ── TTFT & Latency by Model (separate charts) ── */}
           <div style={{ display: "flex", gap: 16, marginBottom: 20 }}>
-            <Card title="TTFT & Latency by Model" style={{ flex: 1 }}>
-              {modelLatencyTimeline.length > 0 ? (
-                <ResponsiveContainer width="100%" height={220}>
-                  <AreaChart data={modelLatencyTimeline}>
+            <Card title="Time to First Token (TTFT) by Model" style={{ flex: 1 }}>
+              {ttftChartData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={200}>
+                  <AreaChart data={ttftChartData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
-                    <XAxis dataKey="time" tick={{ fontSize: 10, fill: "var(--text-muted)" }} />
+                    <XAxis dataKey="time" tick={{ fontSize: 9, fill: "var(--text-muted)" }} interval="preserveStartEnd" />
                     <YAxis tick={{ fontSize: 10, fill: "var(--text-muted)" }} unit="ms" />
-                    <Tooltip contentStyle={{ background: "var(--tooltip-bg)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }} />
+                    <Tooltip contentStyle={{ background: "var(--tooltip-bg)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }}
+                      formatter={(v) => [v + "ms", ""]} />
                     <Legend wrapperStyle={{ fontSize: 10 }} />
                     {modelNames.map((mn, i) => (
-                      <Area key={mn + "t"} type="monotone" dataKey={mn + " TTFT"} stroke={ttftLineColors[i % ttftLineColors.length]} fill="none" strokeWidth={2} dot={false} />
-                    ))}
-                    {modelNames.map((mn, i) => (
-                      <Area key={mn + "l"} type="monotone" dataKey={mn + " Latency"} stroke={latLineColors[i % latLineColors.length]} fill="none" strokeWidth={1} strokeDasharray="4 4" dot={false} />
+                      <Area key={mn} type="monotone" dataKey={mn} stroke={modelColors[i % modelColors.length]} fill={modelColors[i % modelColors.length]} fillOpacity={0.08} strokeWidth={2} dot={false} />
                     ))}
                   </AreaChart>
                 </ResponsiveContainer>
               ) : (
-                <div style={{ color: "var(--text-muted)", fontSize: 13, padding: 20 }}>No per-model latency data</div>
+                <div style={{ color: "var(--text-muted)", fontSize: 13, padding: 20 }}>No TTFT data — requires streaming API usage</div>
+              )}
+            </Card>
+
+            <Card title="Model Invocation Latency" style={{ flex: 1 }}>
+              {latencyChartData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={200}>
+                  <AreaChart data={latencyChartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
+                    <XAxis dataKey="time" tick={{ fontSize: 9, fill: "var(--text-muted)" }} interval="preserveStartEnd" />
+                    <YAxis tick={{ fontSize: 10, fill: "var(--text-muted)" }} unit="ms" />
+                    <Tooltip contentStyle={{ background: "var(--tooltip-bg)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }}
+                      formatter={(v) => [v + "ms", ""]} />
+                    <Legend wrapperStyle={{ fontSize: 10 }} />
+                    {modelNames.map((mn, i) => (
+                      <Area key={mn} type="monotone" dataKey={mn} stroke={modelColors[i % modelColors.length]} fill={modelColors[i % modelColors.length]} fillOpacity={0.08} strokeWidth={2} dot={false} />
+                    ))}
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <div style={{ color: "var(--text-muted)", fontSize: 13, padding: 20 }}>No latency data</div>
               )}
             </Card>
           </div>
