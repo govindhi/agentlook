@@ -1,8 +1,8 @@
 # AgentLook
 
-A single-pane-of-glass observability dashboard for **Amazon Bedrock AgentCore**. Monitor agent adoption, performance, cost, and health across your entire agent fleet from one place.
+**AgentLook** is an open-source, self-hosted observability dashboard for AI agents deployed on **AWS using Amazon Bedrock and Amazon Bedrock AgentCore**. It gives you a single pane of glass to monitor agent adoption, performance, cost, and health across your entire fleet — without building custom dashboards in CloudWatch.
 
-Built for leadership and platform teams who need answers to: *How are our agents doing? What are they costing us? Which ones are most used?*
+Built for platform and leadership teams who need answers to: *Which agents are being used? What are they costing us? Are they performing well?*
 
 
 ## What You Get
@@ -12,6 +12,7 @@ The executive view — everything at a glance.
 
 ![Dashboard — KPIs, Resource Inventory, and Latency](images/screenshot-1.png)
 ![Dashboard — Leaderboard, Model Metrics, and Cost](images/screenshot-2.png)
+![Dashboard — Leaderboard, Model Metrics, and Cost](images/screenshot-2a.png)
 
 #### KPI Cards
 
