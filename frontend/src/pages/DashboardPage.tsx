@@ -200,7 +200,7 @@ export default function DashboardPage() {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <div>
-          <h1 style={{ fontSize: 24, margin: 0 }}>AgentOrbit</h1>
+          <h1 style={{ fontSize: 24, margin: 0 }}>AgentLook</h1>
           <p style={{ fontSize: 13, color: "var(--text-secondary)", margin: "4px 0 0" }}>Single pane of glass for all your agents</p>
         </div>
         <TimeRangeSelector value={hours} onChange={setHours} />

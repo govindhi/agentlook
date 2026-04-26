@@ -7,7 +7,7 @@ from app.routers import inventory, metrics, sessions, evaluations, traces, healt
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="AgentOrbit", version="0.1.0")
+app = FastAPI(title="AgentLook", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,

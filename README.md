@@ -1,4 +1,4 @@
-# AgentOrbit
+# AgentLook
 
 A single-pane-of-glass observability dashboard for **Amazon Bedrock AgentCore**. Monitor agent adoption, performance, cost, and health across your entire agent fleet from one place.
 
@@ -158,7 +158,7 @@ The IAM principal running the dashboard backend needs the following permissions:
 ```bash
 # Clone the repo
 git clone <repo-url>
-cd agentorbit
+cd agentlook
 
 # Backend
 cd backend
@@ -196,9 +196,9 @@ docker-compose -f docker-compose.prod.yml up --build -d
 
 | Environment Variable | Default | Description |
 |---------------------|---------|-------------|
-| `AGENTORBIT_AWS_REGION` | `us-east-1` | AWS region for all boto3 clients |
-| `AGENTORBIT_CW_NAMESPACE` | `AWS/Bedrock-AgentCore` | CloudWatch namespace for AgentCore metrics |
-| `AGENTORBIT_SPANS_LOG_GROUP` | `/aws/spans/default` | CloudWatch log group for OTEL spans |
+| `AGENTLOOK_AWS_REGION` | `us-east-1` | AWS region for all boto3 clients |
+| `AGENTLOOK_CW_NAMESPACE` | `AWS/Bedrock-AgentCore` | CloudWatch namespace for AgentCore metrics |
+| `AGENTLOOK_SPANS_LOG_GROUP` | `/aws/spans/default` | CloudWatch log group for OTEL spans |
 | `VITE_API_URL` | `http://localhost:8000` | Backend API URL (frontend build-time) |
 
 ## Enabling AgentCore Observability
@@ -266,7 +266,7 @@ Cost Explorer must be enabled in your AWS account (it's on by default for most a
 | `GET` | `/api/metrics/leaderboard?hours=24` | Per-agent metric leaderboard |
 | `GET` | `/api/metrics/tokens?hours=24` | Account-wide token usage |
 
-### Debug Endpoints (disabled by default, enable with `AGENTORBIT_DEBUG_ENDPOINTS=true`)
+### Debug Endpoints (disabled by default, enable with `AGENTLOOK_DEBUG_ENDPOINTS=true`)
 
 | Method | Path | Description |
 |--------|------|-------------|

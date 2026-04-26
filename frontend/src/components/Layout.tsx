@@ -14,7 +14,7 @@ export function Layout() {
       <nav style={{ width: 220, background: "var(--bg-surface)", padding: "20px 0", flexShrink: 0 }}>
         <h2 style={{ padding: "0 20px", fontSize: 16, marginBottom: 24, display: "flex", alignItems: "center", gap: 8 }}>
           <i className="bi bi-robot" style={{ fontSize: 20 }} />
-          AgentOrbit
+          AgentLook
         </h2>
         {links.map((l) => (
           <NavLink

@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     debug_endpoints: bool = False
 
     class Config:
-        env_prefix = "AGENTORBIT_"
+        env_prefix = "AGENTLOOK_"
 
 
 settings = Settings()

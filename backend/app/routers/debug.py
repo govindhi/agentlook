@@ -1,4 +1,4 @@
-"""Debug endpoints — only available when AGENTORBIT_DEBUG_ENDPOINTS=true."""
+"""Debug endpoints — only available when AGENTLOOK_DEBUG_ENDPOINTS=true."""
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter
 from app.services.clients import get_cloudwatch_client, get_logs_client, get_ce_client

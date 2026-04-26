@@ -9,12 +9,12 @@ const ThemeContext = createContext<{ theme: Theme; toggle: () => void }>({
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>(() => {
-    const saved = localStorage.getItem("agentorbit-theme");
+    const saved = localStorage.getItem("agentlook-theme");
     return saved === "light" ? "light" : "dark";
   });
 
   useEffect(() => {
-    localStorage.setItem("agentorbit-theme", theme);
+    localStorage.setItem("agentlook-theme", theme);
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
 

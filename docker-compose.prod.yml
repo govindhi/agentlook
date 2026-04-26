@@ -3,7 +3,7 @@ services:
     build: ./backend
     environment:
       - AWS_REGION=${AWS_REGION:-us-east-1}
-      - AGENTORBIT_AWS_REGION=${AWS_REGION:-us-east-1}
+      - AGENTLOOK_AWS_REGION=${AWS_REGION:-us-east-1}
     volumes:
       - ~/.aws:/root/.aws:ro
     restart: unless-stopped
