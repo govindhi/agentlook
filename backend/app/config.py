@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:5173", "http://localhost:3000"]  # Override for production
     cache_ttl_seconds: int = 60
     cw_namespace: str = "AWS/Bedrock-AgentCore"
-    spans_log_group: str = "/aws/spans/default"
+    spans_log_group: str = "aws/spans"
     debug_endpoints: bool = False
 
     class Config:
