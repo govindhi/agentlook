@@ -16,7 +16,7 @@ def _get_namespace() -> str:
     client = get_cloudwatch_client()
     for ns in [settings.cw_namespace, "AWS/Bedrock-AgentCore", "Bedrock-AgentCore", "Bedrock-Agentcore", "bedrock-agentcore"]:
         try:
-            resp = client.list_metrics(Namespace=ns, Limit=1)
+            resp = client.list_metrics(Namespace=ns, MetricName="Invocations")
             if resp.get("Metrics"):
                 _resolved_ns = ns
                 logger.info("cloudwatch: resolved namespace %s", ns)

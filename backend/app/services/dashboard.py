@@ -28,7 +28,7 @@ def _get_namespace() -> str:
     candidates = [settings.cw_namespace, "AWS/Bedrock-AgentCore", "Bedrock-AgentCore", "Bedrock-Agentcore", "bedrock-agentcore"]
     for ns in candidates:
         try:
-            resp = client.list_metrics(Namespace=ns, Limit=1)
+            resp = client.list_metrics(Namespace=ns, MetricName="Invocations")
             if resp.get("Metrics"):
                 _resolved_namespace = ns
                 logger.info("Resolved AgentCore CloudWatch namespace: %s", ns)
@@ -87,6 +87,16 @@ def _get_inventory():
     memories = _safe(ctrl.list_memories, [])
     eval_configs = _safe(ctrl.list_online_evaluation_configs, [])
 
+    # Enrich each runtime with protocol info from the detail API.
+    # protocolConfiguration.serverProtocol is only present on the detail response.
+    # HTTP is the default when the field is absent.
+    for rt in runtimes:
+        rid = rt.get("agentRuntimeId", "")
+        if rid:
+            detail = _safe(lambda r=rid: ctrl.get_agent_runtime(r), {})
+            proto_cfg = detail.get("protocolConfiguration", {})
+            rt["serverProtocol"] = proto_cfg.get("serverProtocol", "HTTP")
+
     endpoints = []
     for rt in runtimes:
         rid = rt.get("agentRuntimeId", "")
@@ -123,15 +133,38 @@ def _get_agent_metrics(runtimes, hours: int):
     start, end = _parse_time_range(hours)
     period = _get_period(hours)
     client = get_cloudwatch_client()
+    ns = _get_namespace()
 
     inv_metrics = [
-        ("Invocations", "Sum"), ("Latency", "Average"),
+        ("Invocations", "Sum"),
         ("SystemErrors", "Sum"), ("UserErrors", "Sum"),
         ("Sessions", "Sum"), ("Throttles", "Sum"),
     ]
     res_metrics = [
         ("CPUUsed-vCPUHours", "Sum"), ("MemoryUsed-GBHours", "Sum"),
     ]
+
+    # First, discover the actual dimension values for each runtime's Invocations metric.
+    # The console uses (Resource, Operation, Name) but the Name value varies per endpoint.
+    # We query CloudWatch list_metrics to find the exact dimension sets.
+    arn_to_dims: dict[str, list[dict]] = {}
+    for rt in runtimes:
+        arn = rt.get("agentRuntimeArn", "")
+        if not arn:
+            continue
+        try:
+            resp = client.list_metrics(
+                Namespace=ns,
+                MetricName="Invocations",
+                Dimensions=[{"Name": "Resource", "Value": arn}],
+            )
+            for m in resp.get("Metrics", []):
+                dims = m.get("Dimensions", [])
+                if dims:
+                    arn_to_dims[arn] = dims
+                    break
+        except Exception:
+            pass
 
     all_queries, query_map = [], []
 
@@ -141,31 +174,48 @@ def _get_agent_metrics(runtimes, hours: int):
         if not arn:
             continue
 
-        # Runtime invocation metrics need (Resource, Operation, Name) dimensions
-        endpoint_name = f"{rt_name}::DEFAULT"
-        inv_dims = [
-            {"Name": "Resource", "Value": arn},
-            {"Name": "Operation", "Value": "InvokeAgentRuntime"},
-            {"Name": "Name", "Value": endpoint_name},
-        ]
+        # Use discovered dimensions if available, otherwise fall back to the
+        # standard (Resource, Operation, Name) pattern.
+        inv_dims = arn_to_dims.get(arn)
+        if not inv_dims:
+            endpoint_name = f"{rt_name}::DEFAULT"
+            inv_dims = [
+                {"Name": "Resource", "Value": arn},
+                {"Name": "Operation", "Value": "InvokeAgentRuntime"},
+                {"Name": "Name", "Value": endpoint_name},
+            ]
 
         for mn, st in inv_metrics:
-            qid = f"a{ai}_{mn.replace('-','_').lower()}"
+            qid = f"a{ai}_{mn.replace('-','_').lower()}_{st.lower()}"
             all_queries.append({
                 "Id": qid,
                 "MetricStat": {
-                    "Metric": {"Namespace": _get_namespace(), "MetricName": mn,
+                    "Metric": {"Namespace": ns, "MetricName": mn,
                                "Dimensions": inv_dims},
                     "Period": period, "Stat": st,
                 },
             })
             query_map.append((ai, mn, st))
+        # Query Latency with a single period spanning the entire time range.
+        # This lets CloudWatch compute the true average across all datapoints
+        # instead of us averaging daily averages (which is mathematically wrong).
+        full_period = int((end - start).total_seconds())
+        qid = f"a{ai}_latency_average"
+        all_queries.append({
+            "Id": qid,
+            "MetricStat": {
+                "Metric": {"Namespace": ns, "MetricName": "Latency",
+                           "Dimensions": inv_dims},
+                "Period": full_period, "Stat": "Average",
+            },
+        })
+        query_map.append((ai, "Latency", "Average"))
         for mn, st in res_metrics:
             qid = f"a{ai}_{mn.replace('-','_').lower()}"
             all_queries.append({
                 "Id": qid,
                 "MetricStat": {
-                    "Metric": {"Namespace": _get_namespace(), "MetricName": mn,
+                    "Metric": {"Namespace": ns, "MetricName": mn,
                                "Dimensions": [
                                    {"Name": "Service", "Value": "AgentCore.Runtime"},
                                    {"Name": "Resource", "Value": arn},
@@ -198,10 +248,15 @@ def _get_agent_metrics(runtimes, hours: int):
 
     for i, (ai, mn, st) in enumerate(query_map):
         vals = all_results[i].get("Values", []) if i < len(all_results) else []
-        agents[ai][mn] = _sum(vals) if st == "Sum" else _avg(vals)
+        if st == "Sum":
+            agents[ai][mn] = _sum(vals)
+        else:
+            # For Average with a single full-range period, there's only one value
+            agents[ai][mn] = vals[0] if vals else 0
 
     agent_list = list(agents.values())
     for a in agent_list:
+        a["Latency"] = round(a.get("Latency", 0), 1)
         a["TotalErrors"] = a.get("SystemErrors", 0) + a.get("UserErrors", 0)
         inv = a.get("Invocations", 0)
         a["ErrorRate"] = round((a["TotalErrors"] / inv * 100), 1) if inv > 0 else 0
@@ -247,15 +302,18 @@ def _get_invocation_timeline(hours: int):
 def _get_token_metrics(hours: int):
     start, end = _parse_time_range(hours)
     period = _get_period(hours)
+    full_period = int((end - start).total_seconds())
     client = get_cloudwatch_client()
 
+    # Token counts and invocations use the regular period for timeline data.
+    # Latency and TTFT use a single full-range period for correct averages.
     queries = [
         {"Id": "input_tokens", "MetricStat": {"Metric": {"Namespace": "AWS/Bedrock", "MetricName": "InputTokenCount"}, "Period": period, "Stat": "Sum"}},
         {"Id": "output_tokens", "MetricStat": {"Metric": {"Namespace": "AWS/Bedrock", "MetricName": "OutputTokenCount"}, "Period": period, "Stat": "Sum"}},
         {"Id": "bedrock_inv", "MetricStat": {"Metric": {"Namespace": "AWS/Bedrock", "MetricName": "Invocations"}, "Period": period, "Stat": "Sum"}},
-        {"Id": "bedrock_lat", "MetricStat": {"Metric": {"Namespace": "AWS/Bedrock", "MetricName": "InvocationLatency"}, "Period": period, "Stat": "Average"}},
-        {"Id": "ttft", "MetricStat": {"Metric": {"Namespace": "AWS/Bedrock", "MetricName": "TimeToFirstToken"}, "Period": period, "Stat": "Average"}},
-        {"Id": "ttft_p90", "MetricStat": {"Metric": {"Namespace": "AWS/Bedrock", "MetricName": "TimeToFirstToken"}, "Period": period, "Stat": "p90"}},
+        {"Id": "bedrock_lat", "MetricStat": {"Metric": {"Namespace": "AWS/Bedrock", "MetricName": "InvocationLatency"}, "Period": full_period, "Stat": "Average"}},
+        {"Id": "ttft", "MetricStat": {"Metric": {"Namespace": "AWS/Bedrock", "MetricName": "TimeToFirstToken"}, "Period": full_period, "Stat": "Average"}},
+        {"Id": "ttft_p90", "MetricStat": {"Metric": {"Namespace": "AWS/Bedrock", "MetricName": "TimeToFirstToken"}, "Period": full_period, "Stat": "p90"}},
     ]
     try:
         resp = client.get_metric_data(MetricDataQueries=queries, StartTime=start, EndTime=end)
@@ -373,11 +431,15 @@ def _get_per_model_metrics(hours: int):
         ("Invocations", "Sum"),
         ("InputTokenCount", "Sum"),
         ("OutputTokenCount", "Sum"),
-        ("InvocationLatency", "Average"),
-        ("TimeToFirstToken", "Average"),
         ("InvocationClientErrors", "Sum"),
         ("InvocationServerErrors", "Sum"),
     ]
+    # Latency metrics use a full-range period for correct averages
+    latency_metrics = [
+        ("InvocationLatency", "Average"),
+        ("TimeToFirstToken", "Average"),
+    ]
+    full_period = int((end - start).total_seconds())
 
     all_queries = []
     query_map = []  # (model_id, metric_name, stat)
@@ -394,6 +456,21 @@ def _get_per_model_metrics(hours: int):
                         "Dimensions": [{"Name": "ModelId", "Value": model_id}],
                     },
                     "Period": period,
+                    "Stat": st,
+                },
+            })
+            query_map.append((model_id, mn, st))
+        for mn, st in latency_metrics:
+            qid = f"m{mi}_{mn.lower()}_fp"
+            all_queries.append({
+                "Id": qid,
+                "MetricStat": {
+                    "Metric": {
+                        "Namespace": "AWS/Bedrock",
+                        "MetricName": mn,
+                        "Dimensions": [{"Name": "ModelId", "Value": model_id}],
+                    },
+                    "Period": full_period,
                     "Stat": st,
                 },
             })
@@ -426,7 +503,11 @@ def _get_per_model_metrics(hours: int):
 
     for i, (model_id, mn, st) in enumerate(query_map):
         vals = all_results[i].get("Values", []) if i < len(all_results) else []
-        models[model_id][mn] = _sum(vals) if st == "Sum" else _avg(vals)
+        if st == "Sum":
+            models[model_id][mn] = _sum(vals)
+        else:
+            # Full-range period returns a single value
+            models[model_id][mn] = vals[0] if vals else 0
 
     model_list = list(models.values())
     for m in model_list:
@@ -443,8 +524,13 @@ def _get_per_model_metrics(hours: int):
 
 def _get_per_agent_tokens(hours: int) -> dict:
     """Query OTEL spans for actual per-agent token usage.
-    Returns {agent_id: {input_tokens, output_tokens, avg_latency}}.
+    Returns {service_name: {input_tokens, output_tokens}}.
     Falls back to empty dict if spans log group doesn't exist.
+
+    Uses only 'opentelemetry.instrumentation.botocore.bedrock-runtime' spans
+    as the token source. Each of these spans represents one actual Bedrock API
+    call, so there is no double-counting. This matches how the AWS console
+    computes per-agent token totals.
     """
     from botocore.exceptions import ClientError
     from app.services.clients import get_logs_client
@@ -452,15 +538,13 @@ def _get_per_agent_tokens(hours: int) -> dict:
     client = get_logs_client()
     start, end = _parse_time_range(hours)
 
-    query = """fields attributes.`aws.agent.id` as agent_id,
-       attributes.`gen_ai.usage.input_tokens` as in_tok,
-       attributes.`gen_ai.usage.output_tokens` as out_tok,
-       attributes.`latency_ms` as lat
-| filter ispresent(agent_id)
-| stats sum(in_tok) as input_tokens,
-        sum(out_tok) as output_tokens,
-        avg(lat) as avg_latency
-  by agent_id"""
+    query = """parse @message '"gen_ai.usage.input_tokens":*,' as in_tok
+| parse @message '"gen_ai.usage.output_tokens":*,' as out_tok
+| parse @message '"aws.local.service":"*"' as service_name
+| parse @message '"name":"*"' as span_name
+| filter ispresent(in_tok) and ispresent(service_name)
+| filter span_name = "opentelemetry.instrumentation.botocore.bedrock-runtime"
+| stats sum(in_tok) as input_tokens, sum(out_tok) as output_tokens by service_name"""
 
     try:
         resp = client.start_query(
@@ -468,7 +552,7 @@ def _get_per_agent_tokens(hours: int) -> dict:
             startTime=int(start.timestamp()),
             endTime=int(end.timestamp()),
             queryString=query,
-            limit=200,
+            limit=10000,
         )
     except ClientError as e:
         if e.response["Error"]["Code"] == "ResourceNotFoundException":
@@ -490,13 +574,22 @@ def _get_per_agent_tokens(hours: int) -> dict:
     agents = {}
     for entry in result.get("results", []):
         row = {f["field"]: f["value"] for f in entry}
-        aid = row.get("agent_id", "")
-        if aid:
-            agents[aid] = {
-                "input_tokens": int(float(row.get("input_tokens", 0))),
-                "output_tokens": int(float(row.get("output_tokens", 0))),
-                "avg_latency": round(float(row.get("avg_latency", 0)), 1),
-            }
+        svc = row.get("service_name", "")
+        if not svc:
+            continue
+        agent_name = svc.split(".")[0] if "." in svc else svc
+        in_tok = int(float(row.get("input_tokens", 0)))
+        out_tok = int(float(row.get("output_tokens", 0)))
+        agents[agent_name] = {
+            "input_tokens": in_tok,
+            "output_tokens": out_tok,
+            "avg_latency": 0,
+        }
+        if svc != agent_name:
+            agents[svc] = agents[agent_name]
+
+    logger.info("Per-agent tokens from spans (botocore only): %s",
+                {k: v.get("input_tokens", 0) + v.get("output_tokens", 0) for k, v in agents.items()})
     return agents
 
 
@@ -637,14 +730,26 @@ def get_dashboard(hours: int = 24):
     """Single aggregated response for the executive dashboard."""
     inv = _get_inventory()
     runtimes = inv["runtimes"]
+    endpoints = inv["endpoints"]
+
+    # Filter out MCP-only agents using the protocolConfiguration.serverProtocol
+    # field from the runtime detail API. HTTP is the default when absent.
+    allowed_protocols = {"HTTP", "A2A"}
+    runtimes = [
+        rt for rt in runtimes
+        if rt.get("serverProtocol", "HTTP").upper() in allowed_protocols
+    ]
+    logger.info("Filtered runtimes (HTTP/A2A only): %d of %d",
+                len(runtimes), len(inv["runtimes"]))
 
     agent_list, timeline = _get_agent_metrics(runtimes, hours)
     tokens = _get_token_metrics(hours)
     models = _get_per_model_metrics(hours)
     model_latency_timelines = _get_per_model_latency_timelines(hours)
 
-    # Cost data is daily — always fetch at least 7 days for meaningful charts
-    cost_days = max(hours // 24, 7)
+    # Cost data is daily — Cost Explorer requires at least 1 day.
+    # Use the actual time period, rounded up to whole days.
+    cost_days = max((hours + 23) // 24, 1)
     cost = _get_cost(cost_days)
     agentcore_breakdown = _get_agentcore_cost_breakdown(cost_days)
 
@@ -670,7 +775,10 @@ def get_dashboard(hours: int = 24):
     total_sessions = sum(a.get("Sessions", 0) for a in agent_list)
     total_errors = sum(a.get("TotalErrors", 0) for a in agent_list)
     total_throttles = sum(a.get("Throttles", 0) for a in agent_list)
-    avg_latency = _avg([a.get("Latency", 0) for a in agent_list if a.get("Invocations", 0) > 0])
+    # Weighted average latency: sum(latency * invocations) / sum(invocations)
+    _lat_num = sum(a.get("Latency", 0) * a.get("Invocations", 0) for a in agent_list if a.get("Invocations", 0) > 0)
+    _lat_den = sum(a.get("Invocations", 0) for a in agent_list if a.get("Invocations", 0) > 0)
+    avg_latency = _lat_num / _lat_den if _lat_den > 0 else 0
     total_cpu = sum(a.get("CPUUsed-vCPUHours", 0) for a in agent_list)
     total_mem = sum(a.get("MemoryUsed-GBHours", 0) for a in agent_list)
     has_agentcore_metrics = total_invocations > 0
@@ -691,11 +799,34 @@ def get_dashboard(hours: int = 24):
     # Try to get actual per-agent token usage from OTEL spans
     agent_tokens = _get_per_agent_tokens(hours)
 
-    for a in agent_list:
-        agent_id = a.get("agentRuntimeId", "")
+    # Build a normalized lookup so span service names can match agent runtime names
+    # even when they differ slightly (e.g. span has "pipelineops_PipelineMonitor"
+    # but AgentCore API returns "pipelineops_PipelineMonitor" with different casing
+    # or the span has a prefix/suffix the API name doesn't).
+    _token_lookup_lower = {k.lower(): v for k, v in agent_tokens.items()}
 
-        # Actual tokens from spans (if available)
-        at = agent_tokens.get(agent_id, {})
+    def _match_agent_tokens(agent_name: str) -> dict:
+        """Find the best token match for an agent name."""
+        # 1. Exact match
+        if agent_name in agent_tokens:
+            return agent_tokens[agent_name]
+        # 2. Case-insensitive match
+        lower = agent_name.lower()
+        if lower in _token_lookup_lower:
+            return _token_lookup_lower[lower]
+        # 3. Substring match — span service name contains the agent name or vice versa
+        for span_name, tok in agent_tokens.items():
+            if agent_name in span_name or span_name in agent_name:
+                return tok
+            if lower in span_name.lower() or span_name.lower() in lower:
+                return tok
+        return {}
+
+    for a in agent_list:
+        agent_name = a.get("name", "")
+
+        # Actual tokens from spans — keyed by agent name (from aws.local.service)
+        at = _match_agent_tokens(agent_name)
         a["InputTokens"] = at.get("input_tokens", 0)
         a["OutputTokens"] = at.get("output_tokens", 0)
         a["TotalTokens"] = a["InputTokens"] + a["OutputTokens"]
@@ -711,6 +842,13 @@ def get_dashboard(hours: int = 24):
 
     has_span_tokens = any(a.get("TotalTokens", 0) > 0 for a in agent_list)
 
+    # Log token matching results for debugging
+    if agent_tokens:
+        matched = [a["name"] for a in agent_list if a.get("TotalTokens", 0) > 0]
+        unmatched = [a["name"] for a in agent_list if a.get("TotalTokens", 0) == 0]
+        if unmatched:
+            logger.warning("Agents with 0 tokens (no span match): %s. Span keys: %s", unmatched, list(agent_tokens.keys()))
+
     return {
         "summary": {
             "total_invocations": total_invocations,
@@ -725,9 +863,9 @@ def get_dashboard(hours: int = 24):
             "output_tokens": tokens["output_tokens"]["total"],
             "total_tokens": tokens["input_tokens"]["total"] + tokens["output_tokens"]["total"],
             "bedrock_invocations": tokens["bedrock_inv"]["total"],
-            "avg_model_latency_ms": round(_avg(tokens["bedrock_lat"]["values"]), 1),
-            "avg_ttft_ms": round(_avg(tokens["ttft"]["values"]), 1),
-            "p90_ttft_ms": round(_avg(tokens["ttft_p90"]["values"]), 1),
+            "avg_model_latency_ms": round(tokens["bedrock_lat"]["values"][0] if tokens["bedrock_lat"]["values"] else 0, 1),
+            "avg_ttft_ms": round(tokens["ttft"]["values"][0] if tokens["ttft"]["values"] else 0, 1),
+            "p90_ttft_ms": round(tokens["ttft_p90"]["values"][0] if tokens["ttft_p90"]["values"] else 0, 1),
             "cost_total_usd": cost.get("total", 0),
             "cost_by_service": cost.get("by_service", {}),
         },
