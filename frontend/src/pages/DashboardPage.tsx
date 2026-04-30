@@ -335,7 +335,7 @@ export default function DashboardPage() {
                   <BarChart data={agents} layout="vertical" margin={{ left: 10, right: 20 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" horizontal={false} />
                     <XAxis type="number" tick={{ fontSize: 10, fill: "var(--text-muted)" }} />
-                    <YAxis type="category" dataKey="name" width={130} tick={{ fontSize: 11, fill: "var(--text-secondary)" }} />
+                    <YAxis type="category" dataKey="name" width={260} tick={{ fontSize: 11, fill: "var(--text-secondary)" }} />
                     <Tooltip contentStyle={{ background: "var(--tooltip-bg)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }} />
                     <Bar dataKey="Invocations" radius={[0, 4, 4, 0]}>
                       {agents.map((_, i) => <Cell key={i} fill={barColors[i % barColors.length]} />)}
